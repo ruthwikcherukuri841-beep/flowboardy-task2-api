@@ -1,5 +1,5 @@
 import { CalendarDays } from "lucide-react";
-import { projectById, userById } from "../data/mockData";
+import { projectById, userById } from "../data/directory";
 import type { Task } from "../types";
 
 const statusStyle: Record<string, string> = {

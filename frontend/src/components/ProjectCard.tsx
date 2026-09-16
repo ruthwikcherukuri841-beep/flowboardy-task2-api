@@ -1,5 +1,5 @@
 import { CalendarDays } from "lucide-react";
-import { userById } from "../data/mockData";
+import { userById } from "../data/directory";
 import type { Project } from "../types";
 import { ProgressBar } from "./Progress";
 

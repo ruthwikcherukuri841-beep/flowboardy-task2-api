@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { CalendarDays, Trash2, Users, X } from "lucide-react";
-import { projectById, userById } from "../data/mockData";
+import { projectById, userById } from "../data/directory";
 import type { Project, ProjectStatus, Task, TaskPriority, TaskStatus } from "../types";
 import { ProgressBar } from "./Progress";
 import { TaskCard } from "./TaskCard";

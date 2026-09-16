@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, ArrowRight, CalendarDays, FolderKanban, ListChecks, Plus, Timer, Trophy } from "lucide-react";
-import { currentUser, projects as seedProjects, tasks as seedTasks, userById } from "./data/mockData";
 import { buildActivity, buildNotifications, type AppNotification } from "./data/activity";
+import { setDirectory } from "./data/directory";
+import { api, apiBase } from "./lib/api";
 import { accents, initials, load, save, type AccentKey, type Density } from "./theme";
 import { Navbar } from "./components/Navbar";
 import { ProjectCard } from "./components/ProjectCard";
@@ -13,24 +14,30 @@ import { NewProjectModal, NewTaskModal, ShortcutsModal, Toast } from "./componen
 import { AboutModal, CookiesModal, PrivacyModal, StatusModal, TermsModal } from "./components/Legal";
 import { Footer, SettingsModal, type LegalKind } from "./components/SettingsFooter";
 import { ProfilePage } from "./components/ProfilePage";
-import type { Project, ProjectStatus, Task, TaskPriority, TaskStatus, View } from "./types";
+import type { Project, ProjectStatus, Task, TaskPriority, TaskStatus, User, View } from "./types";
 
 const today = "2026-09-16";
 
+// Signed-in identity for this preview (assignments + profile defaults).
+// Every project, task, and user LIST comes from the REST API — never local data.
+const identity = { id: "u1", name: "Aarav Mehta", email: "aarav@flowboard.app", role: "Full Stack Developer" };
+
 export default function App() {
   const [view, setView] = useState<View>("dashboard");
-  const [projects, setProjects] = useState<Project[]>(seedProjects);
-  const [tasks, setTasks] = useState<Task[]>(seedTasks);
+  const [users, setUsers] = useState<User[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [globalQuery, setGlobalQuery] = useState("");
   const [projectStatus, setProjectStatus] = useState("all");
   const [taskStatus, setTaskStatus] = useState("all");
   const [taskPriority, setTaskPriority] = useState("all");
   const [projectFilter, setProjectFilter] = useState("all");
   const [loading, setLoading] = useState(true);
+  const [bootError, setBootError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [profileName, setProfileName] = useState(() => load("flowboard-name", currentUser.name));
-  const [profileRole, setProfileRole] = useState(() => load("flowboard-role", currentUser.role));
+  const [profileName, setProfileName] = useState(() => load("flowboard-name", identity.name));
+  const [profileRole, setProfileRole] = useState(() => load("flowboard-role", identity.role));
   const [profileBio, setProfileBio] = useState(() => load<string>("flowboard-bio", "Building FlowBoard — focused project tracking for software teams. Currently hardening the board experience before the API milestone."));
   const [profileLocation, setProfileLocation] = useState(() => load<string>("flowboard-location", "Remote"));
   const [accent, setAccent] = useState<AccentKey>(() => load<AccentKey>("flowboard-accent", "slate"));
@@ -39,7 +46,7 @@ export default function App() {
   const compact = density === "compact";
   const accentBtn = accents[accent].btn;
 
-  const [notifications, setNotifications] = useState<AppNotification[]>(() => buildNotifications(seedTasks));
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifTab, setNotifTab] = useState<"all" | "unread">("all");
 
@@ -66,11 +73,29 @@ export default function App() {
   useEffect(() => { save("flowboard-bio", profileBio); }, [profileBio]);
   useEffect(() => { save("flowboard-location", profileLocation); }, [profileLocation]);
 
-  useEffect(() => {
+  // Boot: every list on screen comes from the REST API.
+  const refresh = useCallback(async () => {
+    const [u, p, t] = await Promise.all([api.getUsers(), api.getProjects(), api.getTasks()]);
+    setDirectory(u, p);
+    setUsers(u);
+    setProjects(p);
+    setTasks(t);
+    setNotifications(buildNotifications(t));
+  }, []);
+
+  const boot = useCallback(async () => {
     setLoading(true);
-    const t = setTimeout(() => setLoading(false), 700);
-    return () => clearTimeout(t);
-  }, [view]);
+    setBootError(null);
+    try {
+      await refresh();
+    } catch (e) {
+      setBootError(e instanceof Error ? e.message : "Could not reach the API");
+    } finally {
+      setLoading(false);
+    }
+  }, [refresh]);
+
+  useEffect(() => { void boot(); }, [boot]);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
@@ -127,45 +152,64 @@ export default function App() {
     setView("tasks");
   };
 
-  const createProject = (d: { title: string; description: string; status: ProjectStatus; dueDate: string }) => {
-    const p: Project = { id: `p${Date.now()}`, title: d.title, description: d.description, status: d.status, progress: 0, dueDate: d.dueDate, members: [currentUser.id], createdAt: today };
-    setProjects((ps) => [p, ...ps]);
-    setShowNewProject(false);
-    showToast(`Project “${d.title}” created`);
-  };
-  const updateProject = (p: Project) => { setProjects((ps) => ps.map((x) => (x.id === p.id ? p : x))); setSelectedProjectId(null); showToast("Project updated"); };
-  const deleteProject = (id: string) => {
-    setProjects((ps) => ps.filter((p) => p.id !== id));
-    setTasks((ts) => ts.filter((t) => t.projectId !== id));
-    setSelectedProjectId(null);
-    showToast("Project deleted");
-  };
-  const createTask = (d: { projectId: string; title: string; description: string; status: TaskStatus; priority: TaskPriority; dueDate: string }) => {
-    const t: Task = { id: `t${Date.now()}`, projectId: d.projectId, title: d.title, description: d.description, status: d.status, priority: d.priority, assignee: currentUser.id, dueDate: d.dueDate, createdAt: today };
-    setTasks((ts) => [t, ...ts]);
-    setProjects((ps) => ps.map((p) => {
-      if (p.id !== d.projectId) return p;
-      const count = tasks.filter((x) => x.projectId === p.id).length + 1;
-      const doneCount = tasks.filter((x) => x.projectId === p.id && x.status === "done").length + (d.status === "done" ? 1 : 0);
-      return { ...p, progress: Math.round((doneCount / Math.max(1, count)) * 100) };
-    }));
-    setShowNewTask(false);
-    showToast(`Task “${d.title}” created`);
-  };
-  const setTaskStatusById = (id: string, s: TaskStatus) => {
-    setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, status: s } : t)));
-    const t = tasks.find((x) => x.id === id);
-    if (t) {
-      setProjects((ps) => ps.map((p) => {
-        if (p.id !== t.projectId) return p;
-        const list = tasks.map((x) => (x.id === id ? { ...x, status: s } : x)).filter((x) => x.projectId === p.id);
-        const doneCount = list.filter((x) => x.status === "done").length;
-        return { ...p, progress: list.length ? Math.round((doneCount / list.length) * 100) : p.progress };
-      }));
+  const createProject = async (d: { title: string; description: string; status: ProjectStatus; dueDate: string }) => {
+    try {
+      const p = await api.createProject(d);
+      setShowNewProject(false);
+      showToast(`Project “${p.title}” created`);
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not create project");
     }
-    showToast(`Task moved to ${s.replace("-", " ")}`);
   };
-  const setTaskPriorityById = (id: string, p: TaskPriority) => { setTasks((ts) => ts.map((t) => (t.id === id ? { ...t, priority: p } : t))); showToast(`Priority set to ${p}`); };
+  const updateProject = async (p: Project) => {
+    try {
+      await api.updateProject(p.id, { title: p.title, description: p.description, status: p.status });
+      setSelectedProjectId(null);
+      showToast("Project updated");
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not update project");
+    }
+  };
+  const deleteProject = async (id: string) => {
+    try {
+      await api.deleteProject(id);
+      setSelectedProjectId(null);
+      showToast("Project deleted");
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not delete project");
+    }
+  };
+  const createTask = async (d: { projectId: string; title: string; description: string; status: TaskStatus; priority: TaskPriority; dueDate: string }) => {
+    try {
+      const t = await api.createTask({ ...d, assignee: identity.id });
+      setShowNewTask(false);
+      showToast(`Task “${t.title}” created`);
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not create task");
+    }
+  };
+  const setTaskStatusById = async (id: string, s: TaskStatus) => {
+    try {
+      await api.setTaskStatus(id, s);
+      showToast(`Task moved to ${s.replace("-", " ")}`);
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not update status");
+    }
+  };
+  const setTaskPriorityById = async (id: string, p: TaskPriority) => {
+    try {
+      await api.updateTask(id, { priority: p });
+      showToast(`Priority set to ${p}`);
+      await refresh();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Could not update priority");
+    }
+  };
 
   const tasksFor = (pid: string) => tasks.filter((t) => t.projectId === pid).length;
   const viewTitle = view === "dashboard" ? "Overview" : view === "projects" ? `Projects · ${filteredProjects.length}` : view === "tasks" ? `Tasks · ${filteredTasks.length}` : "Profile";
@@ -189,7 +233,7 @@ export default function App() {
         onNewProject={() => setShowNewProject(true)}
         onShortcuts={() => setShowShortcuts(true)} onToast={showToast}
         onProfile={() => setView("profile")} onSettings={() => setShowSettings(true)}
-        profileName={profileName} profileRole={profileRole} profileEmail={currentUser.email}
+        profileName={profileName} profileRole={profileRole} profileEmail={identity.email}
       />
 
       <div className="mx-auto flex max-w-7xl items-start lg:gap-5 lg:px-5 lg:py-5">
@@ -199,6 +243,10 @@ export default function App() {
         {sidebarOpen && <div className="fixed inset-0 z-20 bg-slate-900/30 lg:hidden" onClick={() => setSidebarOpen(false)} />}
 
         <main className="min-w-0 flex-1 px-4 py-4 sm:px-5 lg:px-0 lg:py-0">
+          {bootError && !loading ? (
+            <ErrorBox message={`${bootError} (API: ${apiBase})`} onRetry={() => void boot()} />
+          ) : (
+            <>
           {view === "dashboard" && (
             <section>
               <div className="flex flex-wrap items-end justify-between gap-3">
@@ -321,7 +369,7 @@ export default function App() {
           )}
 
           {view === "profile" && (
-            <ProfilePage name={profileName} role={profileRole} email={currentUser.email} bio={profileBio} location={profileLocation}
+            <ProfilePage name={profileName} role={profileRole} email={identity.email} bio={profileBio} location={profileLocation}
               accentSolid={accents[accent].solid} projects={projects} tasks={tasks} compact={compact}
               onSave={(n, r, b, l) => { setProfileName(n); setProfileRole(r); setProfileBio(b); setProfileLocation(l); showToast("Profile updated"); }}
               onOpenTask={openTask} onOpenProject={(id) => setSelectedProjectId(id)}
@@ -331,9 +379,11 @@ export default function App() {
 
           <Footer onNav={(v) => setView(v)} onLegal={(k) => setLegal(k)} onShortcuts={() => setShowShortcuts(true)} onSettings={() => setShowSettings(true)} onNewProject={() => setShowNewProject(true)} />
           <p className="mt-3 flex items-center justify-between text-xs text-slate-400">
-            <span>{initials(profileName)} {profileName}'s workspace · {projects.length} projects · {tasks.length} tasks</span>
+            <span>{initials(profileName)} {profileName}'s workspace · {projects.length} projects · {tasks.length} tasks · {users.length} members</span>
             <button onClick={() => setShowShortcuts(true)} className="font-medium hover:text-slate-600">Press <kbd className="rounded border border-slate-200 bg-white px-1 font-mono">?</kbd> for shortcuts</button>
           </p>
+            </>
+          )}
         </main>
       </div>
 
@@ -376,12 +426,12 @@ function FilterPills({ options, value, onChange }: { options: string[]; value: s
   );
 }
 
-export function ErrorBox({ onRetry }: { onRetry: () => void }) {
-  void userById;
+export function ErrorBox({ message, onRetry }: { message?: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center rounded-xl border border-rose-200 bg-rose-50 px-6 py-10 text-center">
       <AlertTriangle className="text-rose-500" />
-      <p className="mt-2 text-sm font-semibold text-rose-700">Couldn't load this view</p>
+      <p className="mt-2 text-sm font-semibold text-rose-700">Couldn't load data from the API</p>
+      <p className="mt-1 max-w-md text-[13px] text-rose-600/80">{message ?? "The server may be down."} Start it with: backend → npm run dev</p>
       <button onClick={onRetry} className="mt-3 rounded-lg bg-rose-600 px-4 py-2 text-[13px] font-semibold text-white hover:bg-rose-500">Try again</button>
     </div>
   );

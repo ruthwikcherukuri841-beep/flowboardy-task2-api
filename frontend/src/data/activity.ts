@@ -1,5 +1,5 @@
 import type { Task } from "../types";
-import { projectById, userById } from "./mockData";
+import { projectById, userById } from "./directory";
 
 export interface AppNotification {
   id: string;

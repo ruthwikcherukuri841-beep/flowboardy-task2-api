@@ -1,12 +1,24 @@
-# FlowBoard — Projects & Tasks for Software Teams
+# FlowBoard — Projects & Tasks (Live API Edition)
 
-Live demo: **https://flowboardy.vercel.app**
+Live demo: **https://flowboardy-task2.vercel.app** · API: **https://flowboardy-api.vercel.app/health**
 
 FlowBoard is a calm, fast workspace for tracking projects and tasks. One overview for standup, one board for projects, one list for tasks — with search, filters, notifications, profiles, and display preferences built in.
 
-![FlowBoard](screenshots/dashboard.png)
+> Task 2 build. Every project, task, and user on screen is fetched from the FlowBoard REST API (`VITE_API_URL`). No mock data anywhere in this folder — run the backend and the board goes live.
 
-> Frontend preview (Task 1). Data stays in the browser via local storage + seeded demo content. The hosted API with accounts, sync, and AI assistance lands in the next milestones.
+## Run it (both parts, Task 2 folder only)
+
+```bash
+# terminal 1 — API
+cd backend
+npm install
+npm run dev        # http://localhost:5000
+
+# terminal 2 — dashboard
+cd frontend
+npm install
+npm run dev        # http://localhost:5173 (reads VITE_API_URL, defaults to localhost:5000/api)
+```
 
 ## Highlights
 
@@ -37,14 +49,15 @@ FlowBoard is a calm, fast workspace for tracking projects and tasks. One overvie
 - React 19 + Vite 8 + TypeScript
 - Tailwind CSS v4
 - lucide-react icons
-- No backend yet — `src/data/mockData.ts` mirrors the future REST shapes (`User`, `Project`, `Task`)
+- Data: 100% FlowBoard REST API via `src/lib/api.ts` (`VITE_API_URL`) — zero mock data
 
-## Getting started
+## Configuration
 
-```bash
-npm install
-npm run dev      # http://localhost:5173
-```
+| Variable | Required | Default | Purpose |
+| -------- | -------- | ------- | ------- |
+| `VITE_API_URL` | No | `http://localhost:5000/api` | Base URL of the FlowBoard REST API |
+
+Set it in `.env` (see `.env.example`) or as a build env on Vercel. If the API is unreachable, the board shows an error panel with retry — never fake data.
 
 Production build:
 
@@ -56,7 +69,7 @@ npm run preview
 Deploy (Vercel):
 
 ```bash
-npx vercel deploy --prod --name flowboardy
+npx vercel deploy --prod --name flowboardy-task2 --build-env VITE_API_URL=https://flowboardy-api.vercel.app/api
 ```
 
 ## Project structure
@@ -66,7 +79,8 @@ src/
   components/   Navbar, Sidebar, ProjectCard, TaskCard, Progress,
                 States, NotificationsPanel, DetailModals, Modals,
                 Legal, SettingsFooter, ProfilePage
-  data/         mockData.ts (seed), activity.ts (notifications + feed)
+  data/         directory.ts (live API cache), activity.ts (notifications + feed)
+  lib/          api.ts (typed REST client)
   hooks/        useSearchFilter.ts
   theme.ts      accents, density, localStorage helpers
   types.ts      User, Project, Task, View
