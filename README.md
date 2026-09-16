@@ -7,4 +7,4 @@ This folder evolves Task 1 by copying the FlowBoard dashboard into `frontend/` a
 
 See `backend/README.md` for the full endpoint contract and `backend/postman_collection.json` for a one-click Postman import.
 
-Live frontend demo: https://flowboardy.vercel.app
+Live demo: https://flowboardy-task2.vercel.app (reads https://flowboardy-api.vercel.app/api — zero mock data)
