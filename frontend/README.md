@@ -1,0 +1,106 @@
+# FlowBoard — Projects & Tasks for Software Teams
+
+Live demo: **https://flowboardy.vercel.app**
+
+FlowBoard is a calm, fast workspace for tracking projects and tasks. One overview for standup, one board for projects, one list for tasks — with search, filters, notifications, profiles, and display preferences built in.
+
+![FlowBoard](screenshots/dashboard.png)
+
+> Frontend preview (Task 1). Data stays in the browser via local storage + seeded demo content. The hosted API with accounts, sync, and AI assistance lands in the next milestones.
+
+## Highlights
+
+- **Overview dashboard** — greeting summary, clickable stat cards, priority projects, needs-attention queue, recent activity feed
+- **Projects** — status filters, live search, detail view with members, progress, per-project tasks, edit / delete
+- **Tasks** — status + priority + project filters, live search, detail view with one-click status / priority changes
+- **Notifications panel** — overdue, due-soon, assignments, completions; All / Unread tabs, mark-read, deep-link to tasks
+- **Profile page** — editable name / role (saved locally), assigned vs completed stats, recent work
+- **Display settings** — 6 accent colors, comfortable / compact density, show / hide completed tasks; all persisted
+- **Full footer + legal** — Terms of Service, Privacy Policy, Cookie Notice, About, and live Status dialogs (no dead links)
+- **Every button works** — no placeholder controls; toasts confirm creates, updates, deletes
+- **Responsive** — mobile bottom-sheet modals, collapsible sidebar, adaptive grids at 360 / 768 / 1280px
+- **Accessible** — focus-visible rings, dialog roles, labeled search and filters, keyboard shortcuts
+
+### Keyboard shortcuts
+
+| Key | Action |
+| --- | ------ |
+| `/` | Focus search |
+| `N` | New task |
+| `P` | New project |
+| `1` `2` `3` `4` | Overview / Projects / Tasks / Profile |
+| `?` | Shortcut help |
+| `Esc` | Close dialogs |
+
+## Tech stack
+
+- React 19 + Vite 8 + TypeScript
+- Tailwind CSS v4
+- lucide-react icons
+- No backend yet — `src/data/mockData.ts` mirrors the future REST shapes (`User`, `Project`, `Task`)
+
+## Getting started
+
+```bash
+npm install
+npm run dev      # http://localhost:5173
+```
+
+Production build:
+
+```bash
+npm run build
+npm run preview
+```
+
+Deploy (Vercel):
+
+```bash
+npx vercel deploy --prod --name flowboardy
+```
+
+## Project structure
+
+```
+src/
+  components/   Navbar, Sidebar, ProjectCard, TaskCard, Progress,
+                States, NotificationsPanel, DetailModals, Modals,
+                Legal, SettingsFooter, ProfilePage
+  data/         mockData.ts (seed), activity.ts (notifications + feed)
+  hooks/        useSearchFilter.ts
+  theme.ts      accents, density, localStorage helpers
+  types.ts      User, Project, Task, View
+  App.tsx       board state, filters, CRUD, routing between views
+```
+
+## Data shapes (locked for API reuse)
+
+```ts
+User { id, name, email, avatar, role }
+Project { id, title, description, status, progress, dueDate, members, createdAt }
+Task { id, projectId, title, description, status, priority, assignee, dueDate, createdAt }
+```
+
+## Screenshots
+
+| Overview | Projects | Tasks | Profile |
+| -------- | -------- | ----- | ------- |
+| `screenshots/dashboard.png` | `screenshots/projects.png` | `screenshots/tasks.png` | `screenshots/profile.png` |
+
+Capture at 1280px + one 390px mobile shot (`screenshots/mobile.png`).
+
+## Environment
+
+See `.env.example`. No secrets in this repo — never commit `.env`.
+
+## Roadmap
+
+- [x] Frontend dashboard (this repo)
+- [ ] REST API: users, projects, tasks + auth
+- [ ] Persistent database + relationships
+- [ ] Full-stack AI platform (task generation, summaries, prioritization)
+- [ ] Team invites, comments, hosted sync
+
+## License
+
+MIT — free for personal and commercial use.
