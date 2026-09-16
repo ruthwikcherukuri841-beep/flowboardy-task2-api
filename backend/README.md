@@ -1,17 +1,32 @@
-# FlowBoard API — Users, Projects & Tasks
+# FlowBoard API — Auth, Users, Projects & Tasks
 
-Express + Zod REST API backing the FlowBoard dashboard. In-memory store for this milestone (same shapes as `frontend/src/data/mockData.ts`); the next milestone swaps the store for a persistent database without changing routes.
+Express + Zod + Mongoose REST API backing the FlowBoard dashboard. Persistent MongoDB storage (Atlas in production, ephemeral in-memory Mongo for zero-setup local dev).
 
 ## Quick start
 
 ```bash
 cd backend
-cp .env.example .env   # optional — defaults work
+cp .env.example .env   # optional — defaults work locally
 npm install
 npm run dev            # http://localhost:5000
 ```
 
+First boot seeds a demo workspace. Sign in with `demo@flowboard.app` / `demo1234`.
+
 Health check: `GET /health` → `{ success: true, data: { status: "ok" } }`
+
+## Auth
+
+JWT Bearer tokens (7-day expiry, `JWT_SECRET`). Every `/api/users|projects|tasks` route requires `Authorization: Bearer <token>` → 401 otherwise.
+
+| Method | URL | Body |
+| ------ | --- | ---- |
+| POST | `/api/auth/register` | `{ name, email, password, role? }` → 201 `{ token, user }` / 409 duplicate |
+| POST | `/api/auth/login` | `{ email, password }` → 200 `{ token, user }` / 401 wrong credentials |
+| GET | `/api/auth/me` | current user (protected) |
+| POST | `/api/auth/logout` | `{ message }` (client clears token) |
+
+Passwords are bcrypt-hashed; hashes never leave the server.
 
 ## Response format
 

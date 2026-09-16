@@ -8,13 +8,13 @@ export function Navbar({
   query, onQuery, onMenu, sidebarOpen, viewTitle,
   notifications, notifTab, onNotifTab, onOpenTask, onMarkRead, onMarkAll, onClearNotifs,
   notifOpen, onNotifToggle, onNotifClose,
-  onNewTask, onNewProject, onShortcuts, onToast, onProfile, onSettings, profileName, profileRole, profileEmail,
+  onNewTask, onNewProject, onShortcuts, onProfile, onSettings, onSignOut, profileName, profileRole, profileEmail,
 }: {
   query: string; onQuery: (v: string) => void; onMenu: () => void; sidebarOpen: boolean; viewTitle: string;
   notifications: AppNotification[]; notifTab: "all" | "unread"; onNotifTab: (t: "all" | "unread") => void;
   onOpenTask: (id: string) => void; onMarkRead: (id: string) => void; onMarkAll: () => void; onClearNotifs: () => void;
   notifOpen: boolean; onNotifToggle: () => void; onNotifClose: () => void;
-  onNewTask: () => void; onNewProject: () => void; onShortcuts: () => void; onToast: (m: string) => void;
+  onNewTask: () => void; onNewProject: () => void; onShortcuts: () => void; onSignOut: () => void;
   onProfile: () => void; onSettings: () => void; profileName: string; profileRole: string; profileEmail: string;
 }) {
   const [profileOpen, setProfileOpen] = useState(false);
@@ -94,7 +94,7 @@ export function Navbar({
                     <button onClick={() => { setProfileOpen(false); onProfile(); }} className="block w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50">View profile</button>
                     <button onClick={() => { setProfileOpen(false); onSettings(); }} className="block w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50">Display settings</button>
                     <button onClick={() => { setProfileOpen(false); onShortcuts(); }} className="block w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50">Keyboard shortcuts</button>
-                    <button onClick={() => { setProfileOpen(false); onToast("Demo workspace — sign-in stays on for this preview."); }} className="block w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50">Sign out</button>
+                    <button onClick={() => { setProfileOpen(false); onSignOut(); }} className="block w-full px-4 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50">Sign out</button>
                   </div>
                 </div>
               </>

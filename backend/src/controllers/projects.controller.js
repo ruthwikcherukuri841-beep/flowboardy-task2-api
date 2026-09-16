@@ -1,49 +1,60 @@
-import { projects, tasks, uid, users } from "../data/store.js";
+import { Project } from "../models/Project.js";
+import { Task } from "../models/Task.js";
+import { User } from "../models/User.js";
 import { ApiError, asyncHandler, ok } from "../utils/http.js";
 
-const assertMembers = (members = []) => {
+const assertMembers = async (members = []) => {
   for (const m of members) {
-    if (!users.some((u) => u.id === m)) throw ApiError.badRequest(`Unknown member: ${m}`);
+    if (!(await User.exists({ _id: m }))) throw ApiError.badRequest(`Unknown member: ${m}`);
   }
 };
 
 export const listProjects = asyncHandler(async (req, res) => {
   const { search = "", status } = req.query;
-  const q = String(search).toLowerCase();
-  const data = projects.filter((p) => {
-    const matchQ = !q || `${p.title} ${p.description}`.toLowerCase().includes(q);
-    const matchS = !status || p.status === status;
-    return matchQ && matchS;
-  });
-  return ok(res, data);
+  const filter = {};
+  if (status) filter.status = status;
+  if (search) {
+    const q = String(search);
+    filter.$or = [{ title: new RegExp(q, "i") }, { description: new RegExp(q, "i") }];
+  }
+  return ok(res, await Project.find(filter).sort({ createdAt: -1 }));
 });
 
 export const getProject = asyncHandler(async (req, res) => {
-  const project = projects.find((p) => p.id === req.params.id);
+  const project = await Project.findById(req.params.id);
   if (!project) throw ApiError.notFound("Project not found");
-  return ok(res, { ...project, tasks: tasks.filter((t) => t.projectId === project.id) });
+  const tasks = await Task.find({ projectId: project.id }).sort({ createdAt: -1 });
+  return ok(res, { ...project.toJSON(), tasks });
 });
 
 export const createProject = asyncHandler(async (req, res) => {
-  assertMembers(req.body.members);
-  const project = { id: uid("p"), progress: 0, createdAt: new Date().toISOString().slice(0, 10), ...req.body };
-  projects.push(project);
+  await assertMembers(req.body.members);
+  const project = await Project.create({
+    title: req.body.title,
+    description: req.body.description ?? "",
+    status: req.body.status ?? "active",
+    dueDate: req.body.dueDate ?? "",
+    members: req.body.members ?? [],
+    createdBy: req.userId,
+  });
   return ok(res, project, 201);
 });
 
 export const updateProject = asyncHandler(async (req, res) => {
-  const project = projects.find((p) => p.id === req.params.id);
+  const project = await Project.findById(req.params.id);
   if (!project) throw ApiError.notFound("Project not found");
-  if (req.body.members) assertMembers(req.body.members);
-  Object.assign(project, req.body);
+  if (req.body.members) await assertMembers(req.body.members);
+  for (const k of ["title", "description", "status", "dueDate", "progress", "members"]) {
+    if (req.body[k] !== undefined) project[k] = req.body[k];
+  }
+  await project.save();
   return ok(res, project);
 });
 
 export const deleteProject = asyncHandler(async (req, res) => {
-  const idx = projects.findIndex((p) => p.id === req.params.id);
-  if (idx === -1) throw ApiError.notFound("Project not found");
-  const [removed] = projects.splice(idx, 1);
-  // Cascade: a project owns its tasks
-  for (let i = tasks.length - 1; i >= 0; i--) if (tasks[i].projectId === removed.id) tasks.splice(i, 1);
-  return ok(res, removed);
+  const project = await Project.findById(req.params.id);
+  if (!project) throw ApiError.notFound("Project not found");
+  await Task.deleteMany({ projectId: project.id });
+  await project.deleteOne();
+  return ok(res, project);
 });

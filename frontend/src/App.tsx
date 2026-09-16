@@ -3,6 +3,8 @@ import { AlertTriangle, ArrowRight, CalendarDays, FolderKanban, ListChecks, Plus
 import { buildActivity, buildNotifications, type AppNotification } from "./data/activity";
 import { setDirectory } from "./data/directory";
 import { api, apiBase } from "./lib/api";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
+import { AuthScreen } from "./components/AuthScreen";
 import { accents, initials, load, save, type AccentKey, type Density } from "./theme";
 import { Navbar } from "./components/Navbar";
 import { ProjectCard } from "./components/ProjectCard";
@@ -18,11 +20,34 @@ import type { Project, ProjectStatus, Task, TaskPriority, TaskStatus, User, View
 
 const today = "2026-09-16";
 
-// Signed-in identity for this preview (assignments + profile defaults).
-// Every project, task, and user LIST comes from the REST API — never local data.
-const identity = { id: "u1", name: "Aarav Mehta", email: "aarav@flowboard.app", role: "Full Stack Developer" };
-
 export default function App() {
+  return (
+    <AuthProvider>
+      <Gate />
+    </AuthProvider>
+  );
+}
+
+function Gate() {
+  const { user, ready } = useAuth();
+  if (!ready) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f4f5f7]">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900 text-base font-black text-white">F</span>
+          <span className="text-sm font-semibold text-slate-500">Loading FlowBoard…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!user) return <AuthScreen />;
+  return <Shell user={user} />;
+}
+
+// The workspace. Mounts only for a signed-in user; every list here is
+// fetched from the REST API with that user's token — never local data.
+function Shell({ user }: { user: User }) {
+  const { refreshMe, logout } = useAuth();
   const [view, setView] = useState<View>("dashboard");
   const [users, setUsers] = useState<User[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -36,8 +61,8 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  const [profileName, setProfileName] = useState(() => load("flowboard-name", identity.name));
-  const [profileRole, setProfileRole] = useState(() => load("flowboard-role", identity.role));
+  const [profileName, setProfileName] = useState(() => load("flowboard-name", user.name));
+  const [profileRole, setProfileRole] = useState(() => load("flowboard-role", user.role));
   const [profileBio, setProfileBio] = useState(() => load<string>("flowboard-bio", "Building FlowBoard — focused project tracking for software teams. Currently hardening the board experience before the API milestone."));
   const [profileLocation, setProfileLocation] = useState(() => load<string>("flowboard-location", "Remote"));
   const [accent, setAccent] = useState<AccentKey>(() => load<AccentKey>("flowboard-accent", "slate"));
@@ -154,7 +179,7 @@ export default function App() {
 
   const createProject = async (d: { title: string; description: string; status: ProjectStatus; dueDate: string }) => {
     try {
-      const p = await api.createProject(d);
+      const p = await api.createProject({ ...d, members: [user.id] });
       setShowNewProject(false);
       showToast(`Project “${p.title}” created`);
       await refresh();
@@ -184,7 +209,7 @@ export default function App() {
   };
   const createTask = async (d: { projectId: string; title: string; description: string; status: TaskStatus; priority: TaskPriority; dueDate: string }) => {
     try {
-      const t = await api.createTask({ ...d, assignee: identity.id });
+      const t = await api.createTask({ ...d, assignee: user.id });
       setShowNewTask(false);
       showToast(`Task “${t.title}” created`);
       await refresh();
@@ -231,9 +256,9 @@ export default function App() {
         notifOpen={notifOpen} onNotifToggle={() => setNotifOpen((v) => !v)} onNotifClose={() => setNotifOpen(false)}
         onNewTask={() => { setNewTaskProject(undefined); setShowNewTask(true); }}
         onNewProject={() => setShowNewProject(true)}
-        onShortcuts={() => setShowShortcuts(true)} onToast={showToast}
-        onProfile={() => setView("profile")} onSettings={() => setShowSettings(true)}
-        profileName={profileName} profileRole={profileRole} profileEmail={identity.email}
+        onShortcuts={() => setShowShortcuts(true)}
+        onProfile={() => setView("profile")} onSettings={() => setShowSettings(true)} onSignOut={logout}
+        profileName={profileName} profileRole={profileRole} profileEmail={user.email}
       />
 
       <div className="mx-auto flex max-w-7xl items-start lg:gap-5 lg:px-5 lg:py-5">
@@ -369,12 +394,21 @@ export default function App() {
           )}
 
           {view === "profile" && (
-            <ProfilePage name={profileName} role={profileRole} email={identity.email} bio={profileBio} location={profileLocation}
-              accentSolid={accents[accent].solid} projects={projects} tasks={tasks} compact={compact}
-              onSave={(n, r, b, l) => { setProfileName(n); setProfileRole(r); setProfileBio(b); setProfileLocation(l); showToast("Profile updated"); }}
+            <ProfilePage name={profileName} role={profileRole} email={user.email} bio={profileBio} location={profileLocation}
+              userId={user.id} accentSolid={accents[accent].solid} projects={projects} tasks={tasks} compact={compact}
+              onSave={async (n, r, b, l) => {
+                setProfileName(n); setProfileRole(r); setProfileBio(b); setProfileLocation(l);
+                try {
+                  await api.updateUser(user.id, { name: n, role: r });
+                  await refreshMe();
+                  showToast("Profile updated");
+                } catch (e) {
+                  showToast(e instanceof Error ? e.message : "Profile saved on this device only");
+                }
+              }}
               onOpenTask={openTask} onOpenProject={(id) => setSelectedProjectId(id)}
               onBrowseTasks={(s) => { setTaskStatus(s); setProjectFilter("all"); setView("tasks"); }}
-              onToast={showToast} />
+              onToast={showToast} onSignOut={logout} />
           )}
 
           <Footer onNav={(v) => setView(v)} onLegal={(k) => setLegal(k)} onShortcuts={() => setShowShortcuts(true)} onSettings={() => setShowSettings(true)} onNewProject={() => setShowNewProject(true)} />

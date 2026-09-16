@@ -8,17 +8,18 @@ import { TaskCard } from "./TaskCard";
 type Browse = "all" | "todo" | "in-progress" | "done";
 
 export function ProfilePage({
-  name, role, email, bio, location, accentSolid,
+  name, role, email, bio, location, accentSolid, userId,
   projects, tasks, compact,
-  onSave, onOpenTask, onOpenProject, onBrowseTasks, onToast,
+  onSave, onOpenTask, onOpenProject, onBrowseTasks, onToast, onSignOut,
 }: {
-  name: string; role: string; email: string; bio: string; location: string; accentSolid: string;
+  name: string; role: string; email: string; bio: string; location: string; accentSolid: string; userId: string;
   projects: Project[]; tasks: Task[]; compact: boolean;
   onSave: (name: string, role: string, bio: string, location: string) => void;
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
   onBrowseTasks: (s: Browse) => void;
   onToast: (m: string) => void;
+  onSignOut: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [n, setN] = useState(name);
@@ -27,13 +28,13 @@ export function ProfilePage({
   const [l, setL] = useState(location);
   const [tab, setTab] = useState<Browse>("all");
 
-  const mine = useMemo(() => tasks.filter((t) => t.assignee === "u1"), [tasks]);
+  const mine = useMemo(() => tasks.filter((t) => t.assignee === userId), [tasks, userId]);
   const done = mine.filter((t) => t.status === "done").length;
   const inProg = mine.filter((t) => t.status === "in-progress").length;
   const todo = mine.filter((t) => t.status === "todo").length;
   const overdue = mine.filter((t) => t.status !== "done" && t.dueDate < "2026-09-16");
   const rate = mine.length ? Math.round((done / mine.length) * 100) : 0;
-  const myProjects = useMemo(() => projects.filter((p) => p.members.includes("u1")), [projects]);
+  const myProjects = useMemo(() => projects.filter((p) => p.members.includes(userId)), [projects, userId]);
   const visible = mine.filter((t) => tab === "all" || t.status === tab);
   const weekBars = useMemo(() => ["M", "T", "W", "T", "F", "S", "S"].map((d, i) => ({
     d, h: 18 + ((mine.length * (i + 3) * 37 + done * 11) % 78),
@@ -184,7 +185,7 @@ export function ProfilePage({
               <div className="flex justify-between gap-2"><dt className="text-slate-400">Location</dt><dd className="font-medium text-slate-700">{location}</dd></div>
               <div className="flex justify-between gap-2"><dt className="text-slate-400">Member since</dt><dd className="font-medium text-slate-700">Aug 2026</dd></div>
             </dl>
-            <button onClick={() => onToast("Demo workspace — sign-in stays on for this preview.")} className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-50">Sign out</button>
+            <button onClick={onSignOut} className="mt-3 w-full rounded-lg border border-slate-200 py-2 text-[13px] font-semibold text-slate-600 hover:bg-slate-50">Sign out</button>
           </div>
         </div>
       </div>
