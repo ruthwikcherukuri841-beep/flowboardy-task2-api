@@ -28,6 +28,7 @@ export const createUser = asyncHandler(async (req, res) => {
 });
 
 export const updateUser = asyncHandler(async (req, res) => {
+  if (req.params.id !== req.userId) throw new ApiError(403, "You can only update your own account");
   const user = await User.findById(req.params.id);
   if (!user) throw ApiError.notFound("User not found");
   if (req.body.email) {
@@ -45,6 +46,7 @@ export const updateUser = asyncHandler(async (req, res) => {
 });
 
 export const deleteUser = asyncHandler(async (req, res) => {
+  if (req.params.id !== req.userId) throw new ApiError(403, "You can only delete your own account");
   const user = await User.findById(req.params.id);
   if (!user) throw ApiError.notFound("User not found");
   await user.deleteOne();
