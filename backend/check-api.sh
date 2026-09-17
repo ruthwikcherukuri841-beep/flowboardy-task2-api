@@ -33,11 +33,18 @@ tid="$(jqv '.data.id' <<<"$(curl -s -X POST "$API/tasks" -H "Authorization: Bear
 code="$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$API/tasks/$tid/status" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"status":"review"}')"
 [ "$code" = "200" ] && ok "task -> review" || bad "task status ($code)"
 
-say "TEAMS / CHAT / USERS / UPLOADS route smoke (allow empty)"
+say "TEAMS"
+tmid="$(jqv '.data.id' <<<"$(curl -s -X POST "$API/teams" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"name":"Self-check","description":"from check-api.sh","memberIds":[]}')")"
+[ -n "$tmid" ] && ok "create team" || bad "create team"
+code="$(curl -s -o /dev/null -w '%{http_code}' "$API/teams/$tmid")"
+[ "$code" = "200" ] && ok "get team" || bad "get team ($code)"
+
+say "HEALTH + CLEANUP"
 state="$(jqv '.data.state' <<<"$(curl -s "$API/health")")"
 [ "$state" = "ok" ] && ok "GET $BASE/health" || bad "health"
 
 say "CLEANUP — delete what the check created"
+curl -s -X DELETE "$API/teams/$tmid" -H "Authorization: Bearer $TOKEN" > /dev/null && ok "delete team"
 curl -s -X DELETE "$API/projects/$pid" -H "Authorization: Bearer $TOKEN" > /dev/null && ok "delete project (cascades tasks)"
 curl -s -X DELETE "$API/users/$(jqv '.data.user.id' <<<"$reg")" -H "Authorization: Bearer $TOKEN" > /dev/null && ok "delete check account"
 

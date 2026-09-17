@@ -91,7 +91,7 @@ Enums: task `status = todo \| in-progress \| review \| done` · `priority = low 
 
 | Method | URL | Body → result |
 | ------ | --- | ------------- |
-| GET/POST | `/api/teams` | list / create `{ name, description?, members? }` |
+| GET/POST | `/api/teams` | list / create `{ name, description?, memberIds? }` |
 | GET/PUT/DELETE | `/api/teams/:id` | detail (with members) / update / delete |
 | POST | `/api/teams/:id/members` | `{ userId }` → add a member |
 | DELETE | `/api/teams/:id/members/:userId` | remove a member |
