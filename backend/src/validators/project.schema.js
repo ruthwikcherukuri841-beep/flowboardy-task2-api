@@ -18,3 +18,8 @@ export const projectUpdateSchema = z.object({
   progress: z.number().min(0).max(100).optional(),
   members: z.array(z.string()).optional(),
 }).strict().refine((o) => Object.keys(o).length > 0, { message: "at least one field is required" });
+
+export const projectShareSchema = z.object({
+  userId: z.string().min(1, "userId is required"),
+  access: z.enum(["view", "review", "edit"]).default("view"),
+}).strict();

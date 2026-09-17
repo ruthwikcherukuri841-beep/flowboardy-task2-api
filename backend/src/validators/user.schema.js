@@ -11,4 +11,6 @@ export const userUpdateSchema = z.object({
   name: z.string().min(2).optional(),
   email: z.string().email().optional(),
   role: z.string().min(2).optional(),
+  bio: z.string().max(220).optional(),
+  location: z.string().max(80).optional(),
 }).strict().refine((o) => Object.keys(o).length > 0, { message: "at least one field is required" });

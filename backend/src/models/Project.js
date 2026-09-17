@@ -6,6 +6,14 @@ const json = {
   transform: (_doc, ret) => {
     ret.id = ret._id.toString();
     delete ret._id;
+    if (ret.createdBy) ret.createdBy = ret.createdBy.toString();
+    if (ret.sharedWith) {
+      ret.sharedWith = ret.sharedWith.map((s) => ({
+        user: String(s.user),
+        access: s.access,
+      }));
+    }
+    if (ret.members) ret.members = ret.members.map(String);
     return ret;
   },
 };
@@ -18,6 +26,12 @@ const projectSchema = new mongoose.Schema(
     progress: { type: Number, min: 0, max: 100, default: 0 },
     dueDate: { type: String, default: "" },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    sharedWith: [
+      {
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+        access: { type: String, enum: ["view", "review", "edit"], default: "view" },
+      },
+    ],
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

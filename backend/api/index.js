@@ -3,7 +3,6 @@
 import { createApp } from "../src/app.js";
 import { connectDB } from "../src/config/db.js";
 import { env } from "../src/config/env.js";
-import { seedIfEmpty } from "../src/seed.js";
 
 const app = createApp();
 let ready = false;
@@ -11,7 +10,6 @@ let ready = false;
 export default async function handler(req, res) {
   if (!ready) {
     await connectDB(env.databaseUrl);
-    await seedIfEmpty();
     ready = true;
   }
   return app(req, res);

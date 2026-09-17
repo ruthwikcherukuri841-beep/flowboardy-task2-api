@@ -6,7 +6,19 @@ import { ApiError, asyncHandler, ok } from "../utils/http.js";
 
 const initials = (name) => name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase();
 
-export const listUsers = asyncHandler(async (_req, res) => ok(res, await User.find().sort({ createdAt: 1 })));
+export const listUsers = asyncHandler(async (req, res) => {
+  const q = (req.query.search ?? "").toString().trim();
+  const esc = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const filter = q
+    ? { $or: [
+        { name: { $regex: esc, $options: "i" } },
+        { email: { $regex: esc, $options: "i" } },
+        { role: { $regex: esc, $options: "i" } },
+        { location: { $regex: esc, $options: "i" } },
+      ] }
+    : {};
+  return ok(res, await User.find(filter).sort({ name: 1 }));
+});
 
 export const getUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
@@ -38,9 +50,12 @@ export const updateUser = asyncHandler(async (req, res) => {
   }
   if (req.body.name) {
     user.name = req.body.name;
-    user.avatar = initials(req.body.name);
+    // Keep an uploaded photo; only re-derive initials when no photo is set.
+    if (!/^https?:\/\//i.test(user.avatar || "")) user.avatar = initials(req.body.name);
   }
   if (req.body.role) user.role = req.body.role;
+  if (typeof req.body.bio === "string") user.bio = req.body.bio;
+  if (typeof req.body.location === "string") user.location = req.body.location;
   await user.save();
   return ok(res, user);
 });

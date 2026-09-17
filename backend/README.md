@@ -1,6 +1,6 @@
-# FlowBoard API — Auth, Users, Projects & Tasks
+# FlowBoard API — complete endpoint contract
 
-Express + Zod + Mongoose REST API backing the FlowBoard dashboard. Persistent MongoDB storage (Atlas in production, ephemeral in-memory Mongo for zero-setup local dev).
+Express + Zod + Mongoose REST API. Persistent MongoDB (Atlas in production; ephemeral in-memory Mongo for zero-setup local dev). Deployed at `https://flowboardy-api.vercel.app`.
 
 ## Quick start
 
@@ -11,88 +11,142 @@ npm install
 npm run dev            # http://localhost:5000
 ```
 
-First boot seeds a demo workspace. Sign in with `demo@flowboard.app` / `demo1234`.
+## Base URLs
 
-Health check: `GET /health` → `{ success: true, data: { status: "ok" } }`
+- Production: `https://flowboardy-api.vercel.app/api`
+- Local: `http://localhost:5000/api`
 
-## Auth
+Every request (except `GET /api`, `GET /health`, auth) requires:
 
-JWT Bearer tokens (7-day expiry, `JWT_SECRET`). Every `/api/users|projects|tasks` route requires `Authorization: Bearer <token>` → 401 otherwise.
-
-| Method | URL | Body |
-| ------ | --- | ---- |
-| POST | `/api/auth/register` | `{ name, email, password, role? }` → 201 `{ token, user }` / 409 duplicate |
-| POST | `/api/auth/login` | `{ email, password }` → 200 `{ token, user }` / 401 wrong credentials |
-| GET | `/api/auth/me` | current user (protected) |
-| POST | `/api/auth/logout` | `{ message }` (client clears token) |
-
-Passwords are bcrypt-hashed; hashes never leave the server.
+```
+Authorization: Bearer <token>
+```
 
 ## Response format
 
-- Success: `{ success: true, data: ... }` (201 on creates)
-- Error: `{ success: false, error: { message, details? } }`
-- Codes: `200` ok · `201` created · `400` validation · `404` not found · `409` conflict (duplicate email) · `500` fallback
+- Success: `{ "success": true, "data": ... }` (201 on creates)
+- Error: `{ "success": false, "error": { "message": "...", "details?": [...] } }`
+- Codes: `200` ok · `201` created · `400` validation · `401` unauthorized · `403` forbidden · `404` not found · `409` conflict · `422` unprocessable · `429` rate limited · `500` fallback
 
-## Endpoints
+## Unified API index
 
-### Users
-| Method | URL | Body |
-| ------ | --- | ---- |
-| POST | `/api/users` | `{ name, email, role? }` → 201 / 409 |
-| GET | `/api/users` | list |
-| GET | `/api/users/:id` | — → 404 if missing |
-| PUT | `/api/users/:id` | partial `{ name?, email?, role? }` |
-| DELETE | `/api/users/:id` | also unassigns tasks + removes memberships |
+- `GET /` — on production redirects to `/api` (Vercel normalizes the root path; the redirect keeps the entry point clean).
+- `GET /api` — JSON index naming the service, version and every resource.
+- `GET /health` — `{ success: true, data: { status: "ok" } }`
 
-### Projects
-| Method | URL | Body |
-| ------ | --- | ---- |
-| POST | `/api/projects` | `{ title, description?, status?, dueDate?, members? }` → 201 / 400 unknown member |
-| GET | `/api/projects?search=&status=` | filter by text / active\|completed\|on-hold |
-| GET | `/api/projects/:id` | project + its `tasks` |
-| PUT | `/api/projects/:id` | partial update |
-| DELETE | `/api/projects/:id` | cascade-deletes its tasks |
+## Auth
 
-### Tasks
-| Method | URL | Body |
-| ------ | --- | ---- |
-| POST | `/api/tasks` | `{ projectId, title, description?, status?, priority?, assignee?, dueDate? }` → 201 / 400 unknown ref |
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| POST | `/api/auth/register` | `{ name, email, password, role? }` → 201 `{ token, user }` / 409 duplicate email |
+| POST | `/api/auth/login` | `{ email, password }` → 200 `{ token, user }` / 401 wrong credentials |
+| GET | `/api/auth/me` | current user (protected) |
+
+Passwords are bcrypt-hashed; hashes never leave the server. Tokens are JWT (7-day expiry, `JWT_SECRET`).
+
+## Users
+
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| GET | `/api/users?search=` | member directory (search by name / email / role / location). **Public-facing list for the workspace** — returns `id, name, email, role, location, bio, avatar` |
+| GET | `/api/users/:id` | one profile |
+| PUT | `/api/users/:id` | partial `{ name?, email?, role?, location?, bio? }` (only your own profile) |
+| DELETE | `/api/users/:id` | delete your own account |
+
+## Projects
+
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| GET | `/api/projects?search=&status=` | projects you own **or are shared with**; `status = active \| completed \| on-hold` |
+| POST | `/api/projects` | `{ title, description?, status?, dueDate?, members? }` → 201 |
+| GET | `/api/projects/:id` | project + its `tasks` + `sharedWith` |
+| PUT | `/api/projects/:id` | partial update (owner or `edit` access) |
+| DELETE | `/api/projects/:id` | cascade-deletes its tasks (owner or `edit` access) |
+| POST | `/api/projects/:id/share` | `{ userId, access: "view" \| "review" \| "edit" }` → share/update access (owner) |
+| DELETE | `/api/projects/:id/share/:userId` | stop sharing (owner) |
+
+Sharing access is enforced server-side on every read and write:
+
+| Access | Read | Set status | Set `done` | Edit/delete/share |
+| ------ | ---- | ---------- | ---------- | ----------------- |
+| `view` | yes | no | no | no |
+| `review` | yes | up to `review` | no | no |
+| `edit` | yes | any | yes | edit/delete (not share) |
+| owner | yes | any | yes | everything |
+
+## Tasks
+
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
 | GET | `/api/tasks?projectId=&status=&priority=&search=` | combined filters |
-| GET | `/api/tasks/:id` | — |
-| PUT | `/api/tasks/:id` | partial update (recomputes project progress) |
-| PATCH | `/api/tasks/:id/status` | `{ status: todo\|in-progress\|done }` |
-| DELETE | `/api/tasks/:id` | recomputes project progress |
+| POST | `/api/tasks` | `{ projectId, title, description?, status?, priority?, assignee?, dueDate? }` → 201 (owner) |
+| GET | `/api/tasks/:id` | one task |
+| PUT | `/api/tasks/:id` | partial update (owner) — recomputes project progress |
+| PATCH | `/api/tasks/:id/status` | `{ status }` (access-gated, see table above) |
+| DELETE | `/api/tasks/:id` | (owner) — recomputes project progress |
 
-Enums: `status todo|in-progress|done` · `priority low|medium|high` · project `status active|completed|on-hold`. Dates are `YYYY-MM-DD`.
+Enums: task `status = todo \| in-progress \| review \| done` · `priority = low \| medium \| high` · project `status = active \| completed \| on-hold`. Dates are `YYYY-MM-DD`.
 
-## Try it
+## Teams
 
-```bash
-curl http://localhost:5000/health
-curl http://localhost:5000/api/projects?status=active
-curl -X POST http://localhost:5000/api/tasks -H "Content-Type: application/json" -d "{\"projectId\":\"p1\",\"title\":\"Write release notes\",\"priority\":\"high\"}"
-curl -X PATCH http://localhost:5000/api/tasks/t3/status -H "Content-Type: application/json" -d "{\"status\":\"done\"}"
-curl "http://localhost:5000/api/tasks?status=in-progress&priority=high"
-```
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| GET/POST | `/api/teams` | list / create `{ name, description?, members? }` |
+| GET/PUT/DELETE | `/api/teams/:id` | detail (with members) / update / delete |
+| POST | `/api/teams/:id/members` | `{ userId }` → add a member |
+| DELETE | `/api/teams/:id/members/:userId` | remove a member |
+| POST | `/api/teams/:id/leave` | leave a team |
 
-A ready-made Postman collection lives in `postman_collection.json` (import → run).
+## Chat (temporary)
+
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| GET | `/api/chat/inbox` | conversations with `unread` counts + last message |
+| POST | `/api/chat/send` | `{ to, text }` (≤ 2000 chars) |
+| GET | `/api/chat/:userId/messages` | full thread with one teammate (marks inbound as seen) |
+| DELETE | `/api/chat/:userId/messages` | clear the conversation |
+
+Messages are temporary by design: each document expires after **24 hours** (MongoDB TTL index), so nothing is ever stored long-term.
+
+## Uploads
+
+| Method | URL | Body → result |
+| ------ | --- | ------------- |
+| POST | `/api/uploads/avatar` | `{ image: "data:image/png;base64,..." }` → 201 `{ url }` (imgbb CDN). Requires `IMGBB_KEY`. |
+
+## Environment variables
+
+| Var | Required | Notes |
+| --- | -------- | ----- |
+| `PORT` | no | default `5000` |
+| `NODE_ENV` | no | `development` / `production` |
+| `DATABASE_URL` | prod only | MongoDB connection string; local dev falls back to ephemeral in-memory Mongo |
+| `JWT_SECRET` | yes (prod) | long random string for signing tokens |
+| `JWT_EXPIRES_IN` | no | default `7d` |
+| `IMGBB_KEY` | for avatars | imgbb API key; uploads return 503 without it |
 
 ## Structure
 
 ```
-src/
-  app.js / index.js        express wiring + listen
-  config/env.js            PORT, NODE_ENV, DATABASE_URL (reserved)
-  data/store.js            in-memory users/projects/tasks seed
-  validators/*.schema.js   zod schemas (all write ops)
-  middlewares/http.js      validate, notFound, centralized errorHandler
-  controllers/             thin logic over the store
-  routes/                  /api/users, /api/projects, /api/tasks
+api/index.js            Vercel serverless entry — same express app
+src/app.js              wiring, unified API index, /health
+src/config/             env.js, db.js (Mongo connect)
+src/controllers/        auth, users, projects, tasks, teams, chat, uploads
+src/models/             User, Project, Task, Team, ChatMessage (Mongoose)
+src/middlewares/        auth.js (JWT), http.js (validate / notFound / errorHandler)
+src/routes/             one router per resource, mounted under /api
+src/utils/http.js       ApiError, asyncHandler, access helpers
+src/validators/         Zod schemas for every write op
 ```
 
-## Notes
+## Try it
 
-- No secrets in the repo — config comes from `.env` (see `.env.example`).
-- `DELETE /api/projects/:id` deletes its tasks; `DELETE /api/users/:id` unassigns theirs.
-- Task writes recompute the parent project's `progress` so the dashboard stays truthful.
+```bash
+BASE=https://flowboardy-api.vercel.app/api
+curl $BASE/health
+curl $BASE/api            # unified index
+curl -X POST $BASE/auth/register -H "Content-Type: application/json" \
+  -d '{"name":"Ada","email":"ada@example.com","password":"secret123"}'
+```
+
+A ready-made Postman collection lives in `postman_collection.json` (import → run; `flowboardy-api` variable pre-pointed at production).

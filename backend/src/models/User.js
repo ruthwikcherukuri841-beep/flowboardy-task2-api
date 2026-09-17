@@ -25,6 +25,8 @@ const userSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true, select: false },
     role: { type: String, default: "Member", trim: true },
     avatar: { type: String, default: "" },
+    bio: { type: String, default: "", trim: true, maxlength: 220 },
+    location: { type: String, default: "", trim: true, maxlength: 80 },
   },
   { timestamps: true }
 );

@@ -5,6 +5,7 @@ export class ApiError extends Error {
     this.details = details;
   }
   static badRequest(msg, details) { return new ApiError(400, msg, details); }
+  static forbidden(msg) { return new ApiError(403, msg); }
   static notFound(msg = "Resource not found") { return new ApiError(404, msg); }
   static conflict(msg) { return new ApiError(409, msg); }
 }

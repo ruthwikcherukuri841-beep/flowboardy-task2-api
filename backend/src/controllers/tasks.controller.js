@@ -3,13 +3,27 @@ import { Task } from "../models/Task.js";
 import { User } from "../models/User.js";
 import { ApiError, asyncHandler, ok } from "../utils/http.js";
 
-const assertRefs = async (body) => {
-  if (body.projectId && !(await Project.exists({ _id: body.projectId }))) {
-    throw ApiError.badRequest(`Unknown projectId: ${body.projectId}`);
-  }
-  if (body.assignee && !(await User.exists({ _id: body.assignee }))) {
-    throw ApiError.badRequest(`Unknown assignee: ${body.assignee}`);
-  }
+const REVIEWABLE = new Set(["todo", "in-progress", "review"]);
+
+// Resolve the caller's access ("owner" | "edit" | "review" | "view" | null)
+// for a task's project. Reads are allowed for anyone shared (view/review/edit).
+const projectAccess = async (userId, projectId) => {
+  const project = await Project.findById(projectId);
+  if (!project) return null;
+  if (String(project.createdBy) === String(userId)) return "owner";
+  const entry = project.sharedWith.find((s) => String(s.user) === String(userId));
+  return entry ? entry.access : null;
+};
+
+const accessibleProjectIds = async (userId) => {
+  const projects = await Project.find({ $or: [{ createdBy: userId }, { "sharedWith.user": userId }] }).select("_id");
+  return projects.map((p) => p._id);
+};
+
+const getTaskWithAccess = async (userId, taskId) => {
+  const task = await Task.findById(taskId);
+  if (!task) return { task: null, access: null };
+  return { task, access: await projectAccess(userId, task.projectId) };
 };
 
 const refreshProgress = async (projectId) => {
@@ -22,8 +36,13 @@ const refreshProgress = async (projectId) => {
 
 export const listTasks = asyncHandler(async (req, res) => {
   const { projectId, status, priority, search = "" } = req.query;
-  const filter = {};
-  if (projectId) filter.projectId = projectId;
+  const visibleProjects = await accessibleProjectIds(req.userId);
+  if (visibleProjects.length === 0) return ok(res, []);
+  const filter = { projectId: { $in: visibleProjects } };
+  if (projectId) {
+    if (!visibleProjects.some((p) => String(p) === String(projectId))) throw ApiError.notFound("Project not found");
+    filter.projectId = projectId;
+  }
   if (status) filter.status = status;
   if (priority) filter.priority = priority;
   if (search) {
@@ -34,13 +53,17 @@ export const listTasks = asyncHandler(async (req, res) => {
 });
 
 export const getTask = asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id);
-  if (!task) throw ApiError.notFound("Task not found");
+  const { task, access } = await getTaskWithAccess(req.userId, req.params.id);
+  if (!task || !access) throw ApiError.notFound("Task not found");
   return ok(res, task);
 });
 
 export const createTask = asyncHandler(async (req, res) => {
-  await assertRefs(req.body);
+  const access = await projectAccess(req.userId, req.body.projectId);
+  if (access !== "owner") throw ApiError.forbidden("Only the project owner can add tasks");
+  if (req.body.assignee && !(await User.exists({ _id: req.body.assignee }))) {
+    throw ApiError.badRequest(`Unknown assignee: ${req.body.assignee}`);
+  }
   const task = await Task.create({
     projectId: req.body.projectId,
     title: req.body.title,
@@ -55,11 +78,14 @@ export const createTask = asyncHandler(async (req, res) => {
 });
 
 export const updateTask = asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id);
+  const { task, access } = await getTaskWithAccess(req.userId, req.params.id);
   if (!task) throw ApiError.notFound("Task not found");
-  await assertRefs(req.body);
+  if (access !== "owner") throw ApiError.forbidden("Only the project owner can edit this task");
+  if (req.body.assignee && !(await User.exists({ _id: req.body.assignee }))) {
+    throw ApiError.badRequest(`Unknown assignee: ${req.body.assignee}`);
+  }
   const oldProject = task.projectId.toString();
-  for (const k of ["projectId", "title", "description", "status", "priority", "assignee", "dueDate"]) {
+  for (const k of ["projectId", "title", "description", "priority", "assignee", "dueDate"]) {
     if (req.body[k] !== undefined) task[k] = req.body[k];
   }
   await task.save();
@@ -69,17 +95,26 @@ export const updateTask = asyncHandler(async (req, res) => {
 });
 
 export const updateTaskStatus = asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id);
+  const { task, access } = await getTaskWithAccess(req.userId, req.params.id);
   if (!task) throw ApiError.notFound("Task not found");
-  task.status = req.body.status;
+  const next = req.body.status;
+  if (access === "owner" || access === "edit") {
+    task.status = next;
+  } else if (access === "review") {
+    if (!REVIEWABLE.has(next)) throw ApiError.forbidden("Reviewers can tick for review but only the owner marks tasks completed");
+    task.status = next;
+  } else {
+    throw ApiError.forbidden("You have view-only access to this project");
+  }
   await task.save();
   await refreshProgress(task.projectId);
   return ok(res, task);
 });
 
 export const deleteTask = asyncHandler(async (req, res) => {
-  const task = await Task.findById(req.params.id);
+  const { task, access } = await getTaskWithAccess(req.userId, req.params.id);
   if (!task) throw ApiError.notFound("Task not found");
+  if (access !== "owner") throw ApiError.forbidden("Only the project owner can delete tasks");
   const projectId = task.projectId;
   await task.deleteOne();
   await refreshProgress(projectId);

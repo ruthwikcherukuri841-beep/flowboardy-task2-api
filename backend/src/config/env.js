@@ -6,6 +6,5 @@ export const env = {
   databaseUrl: process.env.DATABASE_URL ?? "",
   jwtSecret: process.env.JWT_SECRET ?? "flowboard-dev-secret-change-me",
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
-  demoEmail: process.env.DEMO_EMAIL ?? "demo@flowboard.app",
-  demoPassword: process.env.DEMO_PASSWORD ?? "demo1234",
+  imgbbKey: process.env.IMGBB_KEY ?? "",
 };

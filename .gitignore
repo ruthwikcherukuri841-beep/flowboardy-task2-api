@@ -1,0 +1,11 @@
+# Task 2 = API only. The dashboard frontend lives in its own Task 1 repo
+# (flowboardy-frontend-task1) and is kept out of this one.
+frontend/
+
+# Node / Vercel / env noise (backend/.gitignore covers backend specifics)
+node_modules/
+.vercel/
+*.log
+.env
+.env.*
+!.env.example
